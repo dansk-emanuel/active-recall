@@ -63,10 +63,11 @@
 
             const handleTranslate = async (e) => {
                 e.preventDefault();
-                if (!inputValue.trim() || isProcessing) return;
+                const cleanKey = API_KEY.trim();
                 
-                if (!API_KEY || API_KEY === "") {
-                    alert("Du har ikke indsat en API-nøgle i koden endnu!");
+                if (!inputValue.trim() || isProcessing) return;
+                if (!cleanKey) {
+                    alert("API-nøgle mangler i koden!");
                     return;
                 }
 
@@ -75,11 +76,12 @@
                 setInputValue('');
 
                 try {
-                    const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${API_KEY}`, {
+                    // Opdateret URL baseret på din fejlbesked (v1beta + flash-latest)
+                    const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${cleanKey}`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
-                            contents: [{ parts: [{ text: `Translate "${text}" from ${sourceLang} to Danish. Return ONLY the translation text without any explanation.` }] }]
+                            contents: [{ parts: [{ text: `Translate "${text}" from ${sourceLang} to Danish. Return ONLY the translation.` }] }]
                         })
                     });
                     
@@ -92,77 +94,81 @@
                     const danish = res.candidates[0].content.parts[0].text.trim();
                     setSentences(prev => [{ id: Date.now(), original: text, danish, createdAt: Date.now() }, ...prev]);
                 } catch (err) { 
-                    console.error(err);
-                    alert("API Fejl: " + err.message);
+                    console.error("Fejl-detaljer:", err);
+                    alert("Der skete en fejl: " + err.message);
                 }
                 setIsProcessing(false);
             };
 
-            const playAudio = async (text) => {
-                // Bruger browserens indbyggede lyd hvis Gemini TTS driller lokalt
-                if (window.speechSynthesis) {
+            const playAudio = (text) => {
+                if ('speechSynthesis' in window) {
+                    window.speechSynthesis.cancel();
                     const msg = new SpeechSynthesisUtterance(text);
                     msg.lang = 'da-DK';
+                    msg.rate = 0.9;
                     window.speechSynthesis.speak(msg);
                 } else {
-                    alert("Din browser understøtter ikke lyd.");
+                    alert("Lyd er ikke understøttet i denne browser.");
                 }
             };
 
-            return React.createElement('div', { className: 'max-w-md mx-auto min-h-screen flex flex-col' },
+            return React.createElement('div', { className: 'max-w-md mx-auto min-h-screen flex flex-col shadow-2xl bg-white' },
                 sourceLang && step !== 'welcome' && React.createElement('nav', { className: 'bg-white border-b p-4 sticky top-0 z-50 flex justify-around shadow-sm' },
                     ['input', 'review', 'flashcards'].map(s => React.createElement('button', {
                         key: s, onClick: () => setStep(s),
-                        className: `flex flex-col items-center gap-1 ${step === s ? 'text-blue-600' : 'text-slate-400'}`
+                        className: `flex flex-col items-center gap-1 transition-colors ${step === s ? 'text-blue-600' : 'text-slate-400'}`
                     }, React.createElement(Icon, { name: s === 'input' ? 'plus' : s === 'review' ? 'book' : 'card' })))
                 ),
                 React.createElement('main', { className: 'p-5 flex-1' },
                     (!sourceLang || step === 'welcome') && React.createElement('div', { className: 'pt-10 space-y-6 text-center animate-fade-in' },
-                        React.createElement('h1', { className: 'text-4xl font-black tracking-tight text-blue-600' }, 'LingoRecall'),
-                        React.createElement('p', { className: 'text-slate-500' }, 'Vælg dit modersmål for at starte:'),
-                        React.createElement('div', { className: 'grid gap-2 text-left h-[60vh] overflow-y-auto pr-2 bg-white rounded-2xl border p-2' },
+                        React.createElement('div', { className: 'w-20 h-20 bg-blue-600 rounded-3xl flex items-center justify-center mx-auto shadow-xl mb-6' },
+                            React.createElement('span', { className: 'text-white text-4xl font-bold' }, 'L')
+                        ),
+                        React.createElement('h1', { className: 'text-3xl font-black' }, 'LingoRecall'),
+                        React.createElement('p', { className: 'text-slate-500' }, 'Vælg dit modersmål:'),
+                        React.createElement('div', { className: 'grid gap-2 text-left h-[50vh] overflow-y-auto pr-2 bg-slate-50 rounded-xl p-2' },
                             ["English", "Spanish", "French", "German", "Arabic", "Hindi", "Russian", "Japanese", "Turkish", "Vietnamese", "Portuguese", "Italian", "Polish", "Ukrainian", "Persian", "Urdu", "Dutch", "Greek", "Swedish", "Thai"].map(l => 
                                 React.createElement('button', {
                                     key: l, onClick: () => setSourceLang(l),
-                                    className: 'p-4 border-b last:border-0 hover:bg-blue-50 font-medium transition-all flex justify-between'
-                                }, l, '→')
+                                    className: 'p-4 bg-white border border-slate-100 rounded-xl hover:border-blue-500 font-medium transition-all shadow-sm flex justify-between items-center'
+                                }, l, React.createElement('span', { className: 'text-blue-500 text-xl' }, '→'))
                             )
                         )
                     ),
                     sourceLang && step === 'input' && React.createElement('div', { className: 'space-y-6 animate-fade-in' },
-                        React.createElement('header', null, React.createElement('h2', { className: 'text-2xl font-bold' }, 'Nye gloser'), React.createElement('p', { className: 'text-slate-400' }, sourceLang + ' til Dansk')),
+                        React.createElement('header', null, React.createElement('h2', { className: 'text-2xl font-bold' }, 'Tilføj gloser'), React.createElement('p', { className: 'text-slate-400' }, sourceLang + ' → Dansk')),
                         React.createElement('form', { onSubmit: handleTranslate, className: 'relative' },
                             React.createElement('input', {
                                 value: inputValue, onChange: e => setInputValue(e.target.value),
                                 placeholder: 'Skriv på ' + sourceLang + '...',
-                                className: 'w-full p-5 pr-14 bg-white rounded-2xl border-2 border-slate-100 shadow-sm focus:border-blue-500 outline-none text-lg',
+                                className: 'w-full p-5 pr-14 bg-white rounded-2xl border-2 border-slate-100 shadow-sm focus:border-blue-500 outline-none text-lg transition-all',
                                 disabled: isProcessing
                             }),
-                            React.createElement('button', { type: 'submit', className: 'absolute right-3 top-3 bottom-3 w-10 bg-blue-600 text-white rounded-xl flex items-center justify-center transition-transform active:scale-90' },
-                                isProcessing ? '...' : React.createElement(Icon, { name: 'send', size: 18 })
+                            React.createElement('button', { type: 'submit', className: 'absolute right-3 top-3 bottom-3 w-10 bg-blue-600 text-white rounded-xl flex items-center justify-center active:scale-90 transition-transform' },
+                                isProcessing ? React.createElement('div', { className: 'w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin' }) : React.createElement(Icon, { name: 'send', size: 18 })
                             )
                         ),
-                        React.createElement('div', { className: 'bg-white rounded-2xl border overflow-hidden' },
-                            sentences.length === 0 ? React.createElement('p', { className: 'p-10 text-center text-slate-300 italic' }, 'Ingen sætninger endnu') :
-                            sentences.map(s => React.createElement('div', { key: s.id, className: 'p-4 border-b last:border-0 flex justify-between items-center' },
+                        React.createElement('div', { className: 'space-y-3' },
+                            sentences.length === 0 ? React.createElement('div', { className: 'p-10 text-center text-slate-300 italic' }, 'Ingen gemte sætninger endnu') :
+                            sentences.map(s => React.createElement('div', { key: s.id, className: 'p-4 bg-white rounded-xl border border-slate-100 flex justify-between items-center shadow-sm animate-fade-in' },
                                 React.createElement('div', { className: 'truncate pr-4' }, 
                                     React.createElement('p', { className: 'font-medium truncate text-slate-800' }, s.original),
                                     React.createElement('p', { className: 'text-blue-600 text-xs italic' }, s.danish)
                                 ),
-                                React.createElement('button', { onClick: () => setSentences(sentences.filter(x => x.id !== s.id)), className: 'text-slate-200 hover:text-red-500' }, React.createElement(Icon, { name: 'trash', size: 16 }))
+                                React.createElement('button', { onClick: () => setSentences(sentences.filter(x => x.id !== s.id)), className: 'text-slate-200 hover:text-red-500 transition-colors' }, React.createElement(Icon, { name: 'trash', size: 16 }))
                             ))
                         )
                     ),
                     sourceLang && step === 'review' && React.createElement('div', { className: 'space-y-4 animate-fade-in' },
-                        React.createElement('h2', { className: 'text-2xl font-bold mb-4' }, 'Gennemse & Lyt'),
-                        sentences.map(s => React.createElement('div', { key: s.id, className: 'bg-white p-5 rounded-2xl border flex items-center justify-between shadow-sm' },
+                        React.createElement('h2', { className: 'text-2xl font-bold mb-4' }, 'Gennemse'),
+                        sentences.map(s => React.createElement('div', { key: s.id, className: 'bg-white p-5 rounded-2xl border border-slate-100 flex items-center justify-between shadow-sm' },
                             React.createElement('div', null,
-                                React.createElement('p', { className: 'text-xs text-slate-300 font-bold uppercase' }, sourceLang),
-                                React.createElement('p', { className: 'mb-2 text-slate-600' }, s.original),
-                                React.createElement('p', { className: 'text-xs text-blue-500 font-bold uppercase' }, 'Dansk'),
+                                React.createElement('p', { className: 'text-xs text-slate-300 font-bold uppercase mb-1' }, sourceLang),
+                                React.createElement('p', { className: 'mb-3 text-slate-700' }, s.original),
+                                React.createElement('p', { className: 'text-xs text-blue-500 font-bold uppercase mb-1' }, 'Dansk'),
                                 React.createElement('p', { className: 'text-lg font-bold text-slate-900' }, s.danish)
                             ),
-                            React.createElement('button', { onClick: () => playAudio(s.danish), className: 'w-12 h-12 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center active:scale-95 transition-all' }, React.createElement(Icon, { name: 'volume' }))
+                            React.createElement('button', { onClick: () => playAudio(s.danish), className: 'w-12 h-12 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center hover:bg-blue-100 active:scale-95 transition-all shadow-sm' }, React.createElement(Icon, { name: 'volume' }))
                         ))
                     ),
                     sourceLang && step === 'flashcards' && React.createElement(Flashcards, { sentences, playAudio, sourceLang })
@@ -170,17 +176,17 @@
             );
         };
 
-            const Flashcards = ({ sentences, playAudio, sourceLang }) => {
+        const Flashcards = ({ sentences, playAudio, sourceLang }) => {
             const [stack, setStack] = useState([...sentences]);
             const [idx, setIdx] = useState(0);
             const [flipped, setFlipped] = useState(false);
             const [done, setDone] = useState(false);
 
-            if (sentences.length === 0) return React.createElement('div', { className: 'text-center py-20 text-slate-400' }, 'Tilføj sætninger først.');
+            if (sentences.length === 0) return React.createElement('div', { className: 'text-center py-20 text-slate-400' }, 'Tilføj gloser i menuen for at starte.');
             if (done) return React.createElement('div', { className: 'text-center py-10 space-y-6 animate-fade-in' }, 
-                React.createElement('div', { className: 'text-6xl mb-4' }, '🎯'),
-                React.createElement('h2', { className: 'text-2xl font-bold' }, 'Træning færdig!'),
-                React.createElement('button', { onClick: () => { setStack([...sentences]); setIdx(0); setDone(false); setFlipped(false); }, className: 'p-5 bg-blue-600 text-white rounded-2xl w-full font-bold shadow-lg shadow-blue-200' }, 'Prøv igen')
+                React.createElement('div', { className: 'text-6xl mb-4' }, '🥳'),
+                React.createElement('h2', { className: 'text-2xl font-bold' }, 'Godt gået!'),
+                React.createElement('button', { onClick: () => { setStack([...sentences]); setIdx(0); setDone(false); setFlipped(false); }, className: 'p-5 bg-blue-600 text-white rounded-2xl w-full font-bold shadow-lg active:scale-95 transition-transform' }, 'Øv igen')
             );
 
             const curr = stack[idx];
@@ -199,27 +205,28 @@
 
             return React.createElement('div', { className: 'space-y-8 animate-fade-in' },
                 React.createElement('div', { className: 'flex justify-between text-[10px] font-black text-slate-300 uppercase tracking-widest' }, 
-                    React.createElement('span', null, 'Active Recall'), React.createElement('span', null, `${idx + 1} / ${stack.length}`)
+                    React.createElement('span', null, 'Træning'), React.createElement('span', null, `${idx + 1} / ${stack.length}`)
                 ),
                 React.createElement('div', { 
                     className: 'relative h-80 w-full perspective-1000 cursor-pointer',
                     onClick: () => setFlipped(!flipped)
                 },
                     React.createElement('div', { className: `relative w-full h-full card-transition preserve-3d ${flipped ? 'rotate-y-180' : ''}` },
-                        React.createElement('div', { className: 'absolute inset-0 backface-hidden bg-white rounded-[40px] shadow-2xl flex flex-col items-center justify-center p-8 text-center border' },
+                        React.createElement('div', { className: 'absolute inset-0 backface-hidden bg-white rounded-[40px] shadow-xl flex flex-col items-center justify-center p-8 text-center border-2 border-slate-50' },
                             React.createElement('p', { className: 'text-xs text-blue-300 font-bold mb-4 uppercase' }, sourceLang),
-                            React.createElement('p', { className: 'text-2xl font-medium' }, curr.original)
+                            React.createElement('p', { className: 'text-2xl font-medium text-slate-800' }, curr.original),
+                            React.createElement('p', { className: 'mt-10 text-xs text-slate-300 animate-pulse' }, 'Tryk for at se svar')
                         ),
-                        React.createElement('div', { className: 'absolute inset-0 backface-hidden rotate-y-180 bg-blue-600 rounded-[40px] shadow-2xl flex flex-col items-center justify-center p-8 text-center text-white' },
+                        React.createElement('div', { className: 'absolute inset-0 backface-hidden rotate-y-180 bg-blue-600 rounded-[40px] shadow-xl flex flex-col items-center justify-center p-8 text-center text-white' },
                             React.createElement('p', { className: 'text-xs text-blue-200 font-bold mb-4 uppercase' }, 'Dansk'),
                             React.createElement('p', { className: 'text-2xl font-bold mb-8' }, curr.danish),
-                            React.createElement('button', { onClick: (e) => { e.stopPropagation(); playAudio(curr.danish); }, className: 'w-16 h-16 bg-white/20 rounded-full flex items-center justify-center hover:bg-white/30' }, React.createElement(Icon, { name: 'volume', size: 32 }))
+                            React.createElement('button', { onClick: (e) => { e.stopPropagation(); playAudio(curr.danish); }, className: 'w-16 h-16 bg-white/20 rounded-full flex items-center justify-center hover:bg-white/30 transition-all' }, React.createElement(Icon, { name: 'volume', size: 32 }))
                         )
                     )
                 ),
                 React.createElement('div', { className: 'grid grid-cols-2 gap-4' },
                     React.createElement('button', { onClick: () => next(false), className: 'p-5 bg-white border-2 border-red-50 text-red-500 rounded-2xl font-bold shadow-sm active:scale-95 transition-all' }, 'Svært'),
-                    React.createElement('button', { onClick: () => next(true), className: 'p-5 bg-white border-2 border-green-50 text-green-600 rounded-2xl font-bold shadow-sm active:scale-95 transition-all' }, 'Rigtigt')
+                    React.createElement('button', { onClick: () => next(true), className: 'p-5 bg-white border-2 border-green-50 text-green-600 rounded-2xl font-bold shadow-sm active:scale-95 transition-all' }, 'Let')
                 )
             );
         };
