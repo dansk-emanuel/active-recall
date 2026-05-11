@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>LingoRecall</title>
+    <title>LingoRecall - Active Recall</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         .perspective-1000 { perspective: 1000px; }
@@ -22,8 +22,10 @@
         import React, { useState, useEffect } from "https://esm.sh/react@18.2.0";
         import ReactDOM from "https://esm.sh/react-dom@18.2.0/client";
 
-        // INDSÆT DIN GEMINI API NØGLE HER (Hentes gratis på https://aistudio.google.com/)
-        const API_KEY = "AIzaSyBSiV2CXwfVmygF0SoBi6BImOLWchq5d7w"; 
+        // ==========================================
+        // INDSÆT DIN API-NØGLE HERUNDER:
+        const API_KEY = ""; 
+        // ==========================================
 
         const Icon = ({ name, size = 24 }) => {
             const icons = {
@@ -62,57 +64,49 @@
             const handleTranslate = async (e) => {
                 e.preventDefault();
                 if (!inputValue.trim() || isProcessing) return;
+                
+                if (!API_KEY || API_KEY === "") {
+                    alert("Du har ikke indsat en API-nøgle i koden endnu!");
+                    return;
+                }
+
                 setIsProcessing(true);
                 const text = inputValue;
                 setInputValue('');
 
                 try {
-                    const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${API_KEY}`, {
+                    const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${API_KEY}`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
-                            contents: [{ parts: [{ text: `Translate "${text}" from ${sourceLang} to Danish. Return ONLY the Danish translation.` }] }]
+                            contents: [{ parts: [{ text: `Translate "${text}" from ${sourceLang} to Danish. Return ONLY the translation text without any explanation.` }] }]
                         })
                     });
-                    const res = await resp.json();
-                    const danish = res.candidates[0].content.parts[0].text.trim();
                     
+                    const res = await resp.json();
+                    
+                    if (res.error) {
+                        throw new Error(res.error.message);
+                    }
+
+                    const danish = res.candidates[0].content.parts[0].text.trim();
                     setSentences(prev => [{ id: Date.now(), original: text, danish, createdAt: Date.now() }, ...prev]);
-                } catch (err) { alert("Indsæt venligst en gyldig API-nøgle i koden."); }
+                } catch (err) { 
+                    console.error(err);
+                    alert("API Fejl: " + err.message);
+                }
                 setIsProcessing(false);
             };
 
             const playAudio = async (text) => {
-                try {
-                    const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts?key=${API_KEY}`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            contents: [{ parts: [{ text: `Sig dette på dansk: ${text}` }] }],
-                            generationConfig: { responseModalities: ["AUDIO"], speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: "Kore" } } } },
-                            model: "gemini-2.5-flash-preview-tts"
-                        })
-                    });
-                    const res = await resp.json();
-                    const base64 = res.candidates[0].content.parts[0].inlineData.data;
-                    const audioBlob = createWavBlob(base64);
-                    new Audio(URL.createObjectURL(audioBlob)).play();
-                } catch (e) { console.error(e); }
-            };
-
-            const createWavBlob = (base64) => {
-                const bytes = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
-                const buffer = new ArrayBuffer(44 + bytes.length);
-                const view = new DataView(buffer);
-                const writeStr = (off, s) => { for (let i = 0; i < s.length; i++) view.setUint8(off + i, s.charCodeAt(i)); };
-                writeStr(0, 'RIFF'); view.setUint32(4, 36 + bytes.length, true);
-                writeStr(8, 'WAVE'); writeStr(12, 'fmt '); view.setUint32(16, 16, true);
-                view.setUint16(20, 1, true); view.setUint16(22, 1, true);
-                view.setUint32(24, 24000, true); view.setUint32(28, 48000, true);
-                view.setUint16(32, 2, true); view.setUint16(34, 16, true);
-                writeStr(36, 'data'); view.setUint32(40, bytes.length, true);
-                new Uint8Array(buffer, 44).set(bytes);
-                return new Blob([buffer], { type: 'audio/wav' });
+                // Bruger browserens indbyggede lyd hvis Gemini TTS driller lokalt
+                if (window.speechSynthesis) {
+                    const msg = new SpeechSynthesisUtterance(text);
+                    msg.lang = 'da-DK';
+                    window.speechSynthesis.speak(msg);
+                } else {
+                    alert("Din browser understøtter ikke lyd.");
+                }
             };
 
             return React.createElement('div', { className: 'max-w-md mx-auto min-h-screen flex flex-col' },
@@ -136,7 +130,7 @@
                         )
                     ),
                     sourceLang && step === 'input' && React.createElement('div', { className: 'space-y-6 animate-fade-in' },
-                        React.createElement('header', null, React.createElement('h2', { className: 'text-2xl font-bold' }, 'Dine sætninger'), React.createElement('p', { className: 'text-slate-400' }, sourceLang + ' til Dansk')),
+                        React.createElement('header', null, React.createElement('h2', { className: 'text-2xl font-bold' }, 'Nye gloser'), React.createElement('p', { className: 'text-slate-400' }, sourceLang + ' til Dansk')),
                         React.createElement('form', { onSubmit: handleTranslate, className: 'relative' },
                             React.createElement('input', {
                                 value: inputValue, onChange: e => setInputValue(e.target.value),
@@ -144,7 +138,7 @@
                                 className: 'w-full p-5 pr-14 bg-white rounded-2xl border-2 border-slate-100 shadow-sm focus:border-blue-500 outline-none text-lg',
                                 disabled: isProcessing
                             }),
-                            React.createElement('button', { type: 'submit', className: 'absolute right-3 top-3 bottom-3 w-10 bg-blue-600 text-white rounded-xl flex items-center justify-center' },
+                            React.createElement('button', { type: 'submit', className: 'absolute right-3 top-3 bottom-3 w-10 bg-blue-600 text-white rounded-xl flex items-center justify-center transition-transform active:scale-90' },
                                 isProcessing ? '...' : React.createElement(Icon, { name: 'send', size: 18 })
                             )
                         ),
@@ -176,7 +170,7 @@
             );
         };
 
-        const Flashcards = ({ sentences, playAudio, sourceLang }) => {
+            const Flashcards = ({ sentences, playAudio, sourceLang }) => {
             const [stack, setStack] = useState([...sentences]);
             const [idx, setIdx] = useState(0);
             const [flipped, setFlipped] = useState(false);
@@ -224,8 +218,8 @@
                     )
                 ),
                 React.createElement('div', { className: 'grid grid-cols-2 gap-4' },
-                    React.createElement('button', { onClick: () => next(false), className: 'p-5 bg-white border-2 border-red-50 text-red-500 rounded-2xl font-bold shadow-sm active:scale-95' }, 'Svært'),
-                    React.createElement('button', { onClick: () => next(true), className: 'p-5 bg-white border-2 border-green-50 text-green-600 rounded-2xl font-bold shadow-sm active:scale-95' }, 'Rigtigt')
+                    React.createElement('button', { onClick: () => next(false), className: 'p-5 bg-white border-2 border-red-50 text-red-500 rounded-2xl font-bold shadow-sm active:scale-95 transition-all' }, 'Svært'),
+                    React.createElement('button', { onClick: () => next(true), className: 'p-5 bg-white border-2 border-green-50 text-green-600 rounded-2xl font-bold shadow-sm active:scale-95 transition-all' }, 'Rigtigt')
                 )
             );
         };
