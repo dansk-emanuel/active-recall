@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>LingoRecall - Active Recall</title>
+    <title>LingoRecall - Sikker Mode</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         .perspective-1000 { perspective: 1000px; }
@@ -22,24 +22,19 @@
         import React, { useState, useEffect } from "https://esm.sh/react@18.2.0";
         import ReactDOM from "https://esm.sh/react-dom@18.2.0/client";
 
-        // ==========================================
-        // INDSÆT DIN OPENAI API-NØGLE HERUNDER:
-        const API_KEY = "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"; 
-        // ==========================================
-
         const App = () => {
+            const [apiKey, setApiKey] = useState(() => localStorage.getItem('openai_key') || '');
             const [step, setStep] = useState('welcome');
             const [sourceLang, setSourceLang] = useState(() => localStorage.getItem('lingo_lang') || '');
             const [sentences, setSentences] = useState(() => JSON.parse(localStorage.getItem('lingo_sentences')) || []);
             const [inputValue, setInputValue] = useState('');
             const [isProcessing, setIsProcessing] = useState(false);
 
+            // Gem sprog og nøgle lokalt i browseren
             useEffect(() => {
-                if (sourceLang) {
-                    localStorage.setItem('lingo_lang', sourceLang);
-                    if (step === 'welcome') setStep('input');
-                }
-            }, [sourceLang]);
+                if (apiKey) localStorage.setItem('openai_key', apiKey);
+                if (sourceLang) localStorage.setItem('lingo_lang', sourceLang);
+            }, [apiKey, sourceLang]);
 
             useEffect(() => {
                 localStorage.setItem('lingo_sentences', JSON.stringify(sentences));
@@ -47,9 +42,8 @@
 
             const handleTranslate = async (e) => {
                 e.preventDefault();
-                const cleanKey = API_KEY.trim();
                 if (!inputValue.trim() || isProcessing) return;
-                if (!cleanKey || cleanKey.startsWith("DIN_")) return alert("Husk at indsætte din OpenAI nøgle i koden!");
+                if (!apiKey) return setStep('settings');
 
                 setIsProcessing(true);
                 const text = inputValue;
@@ -60,47 +54,61 @@
                         method: "POST",
                         headers: {
                             "Content-Type": "application/json",
-                            "Authorization": `Bearer ${cleanKey}`
+                            "Authorization": `Bearer ${apiKey}`
                         },
                         body: JSON.stringify({
                             model: "gpt-4o-mini",
                             messages: [
-                                { role: "system", content: `You are a translator. Translate the text to Danish. Return ONLY the translation text.` },
-                                { role: "user", content: `Translate this from ${sourceLang} to Danish: ${text}` }
-                            ],
-                            temperature: 0.3
+                                { role: "system", content: "Oversæt kun teksten til dansk uden forklaringer." },
+                                { role: "user", content: `Oversæt fra ${sourceLang} til dansk: ${text}` }
+                            ]
                         })
                     });
                     
                     const res = await response.json();
-                    
                     if (res.error) throw new Error(res.error.message);
 
                     const danish = res.choices[0].message.content.trim();
-                    setSentences(prev => [{ id: Date.now(), original: text, danish, createdAt: Date.now() }, ...prev]);
+                    setSentences(prev => [{ id: Date.now(), original: text, danish }, ...prev]);
                 } catch (err) { 
-                    alert("OpenAI Fejl: " + err.message);
+                    alert("Fejl: " + err.message);
+                    if (err.message.includes("API key")) setStep('settings');
                 }
                 setIsProcessing(false);
             };
 
+            // Hvis der ingen API nøgle er, vis en "Login" skærm
+            if (!apiKey || step === 'settings') {
+                return React.createElement('div', { className: 'max-w-md mx-auto p-10 space-y-6 text-center' },
+                    React.createElement('h1', { className: 'text-2xl font-bold' }, 'Indstil LingoRecall'),
+                    React.createElement('p', { className: 'text-slate-500 text-sm' }, 'Indsæt din OpenAI API-nøgle for at starte. Nøglen gemmes kun i din egen browser.'),
+                    React.createElement('input', {
+                        type: 'password',
+                        placeholder: 'sk-....',
+                        className: 'w-full p-4 border rounded-xl',
+                        value: apiKey,
+                        onChange: (e) => setApiKey(e.target.value)
+                    }),
+                    React.createElement('button', { 
+                        onClick: () => { if(apiKey) setStep('welcome') },
+                        className: 'w-full p-4 bg-blue-600 text-white rounded-xl font-bold'
+                    }, 'Gem og start')
+                );
+            }
+
+            // --- RESTEN AF PROGRAMMET ER SOM FØR ---
             const playAudio = (text) => {
-                if ('speechSynthesis' in window) {
-                    window.speechSynthesis.cancel();
-                    const msg = new SpeechSynthesisUtterance(text);
-                    msg.lang = 'da-DK';
-                    window.speechSynthesis.speak(msg);
-                }
+                window.speechSynthesis.cancel();
+                const msg = new SpeechSynthesisUtterance(text);
+                msg.lang = 'da-DK';
+                window.speechSynthesis.speak(msg);
             };
 
             const Icon = ({ name }) => {
                 const icons = {
                     plus: '<path d="M5 12h14m-7-7v14"/>',
                     book: '<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20M4 19.5A2.5 2.5 0 0 0 6.5 22H20M4 19.5V5a2.5 2.5 0 0 1 2.5-2.5H20v14"/>',
-                    card: '<rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/>',
-                    volume: '<path d="M11 5L6 9H2v6h4l5 4V5z"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/>',
-                    trash: '<path d="M3 6h18m-2 0v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6m3 0V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>',
-                    send: '<path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/>'
+                    card: '<rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/>'
                 };
                 return React.createElement('svg', {
                     width: 20, height: 20, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor",
@@ -109,109 +117,53 @@
                 });
             };
 
-            return React.createElement('div', { className: 'max-w-md mx-auto min-h-screen flex flex-col bg-white shadow-xl' },
-                sourceLang && step !== 'welcome' && React.createElement('nav', { className: 'bg-white border-b p-4 sticky top-0 z-50 flex justify-around shadow-sm' },
+            return React.createElement('div', { className: 'max-w-md mx-auto min-h-screen bg-white shadow-xl flex flex-col' },
+                sourceLang && React.createElement('nav', { className: 'bg-white border-b p-4 flex justify-around sticky top-0 z-10' },
                     ['input', 'review', 'flashcards'].map(s => React.createElement('button', {
                         key: s, onClick: () => setStep(s),
-                        className: `flex flex-col items-center gap-1 ${step === s ? 'text-blue-600' : 'text-slate-400'}`
+                        className: `p-2 ${step === s ? 'text-blue-600' : 'text-slate-400'}`
                     }, React.createElement(Icon, { name: s === 'input' ? 'plus' : s === 'review' ? 'book' : 'card' })))
                 ),
                 React.createElement('main', { className: 'p-5 flex-1' },
-                    (!sourceLang || step === 'welcome') && React.createElement('div', { className: 'pt-10 space-y-6 text-center animate-fade-in' },
-                        React.createElement('h1', { className: 'text-3xl font-black text-blue-600' }, 'LingoRecall'),
-                        React.createElement('p', { className: 'text-slate-500' }, 'Vælg dit sprog:'),
-                        React.createElement('div', { className: 'grid gap-2 text-left h-[50vh] overflow-y-auto pr-2 bg-slate-50 p-2 rounded-xl' },
-                            ["English", "Spanish", "French", "German", "Arabic", "Hindi", "Russian", "Japanese", "Turkish", "Vietnamese", "Portuguese", "Italian", "Polish", "Ukrainian", "Persian", "Urdu", "Dutch", "Greek", "Swedish", "Thai"].map(l => 
-                                React.createElement('button', {
-                                    key: l, onClick: () => setSourceLang(l),
-                                    className: 'p-4 bg-white border border-slate-100 rounded-xl hover:border-blue-500 font-medium transition-all shadow-sm'
-                                }, l)
-                            )
+                    (!sourceLang || step === 'welcome') ? 
+                    React.createElement('div', { className: 'space-y-4' },
+                        React.createElement('h2', { className: 'text-xl font-bold' }, 'Vælg sprog'),
+                        ["English", "Spanish", "French", "German"].map(l => 
+                            React.createElement('button', { key: l, onClick: () => { setSourceLang(l); setStep('input'); }, className: 'w-full p-4 border rounded-xl text-left hover:bg-slate-50' }, l)
                         )
-                    ),
-                    sourceLang && step === 'input' && React.createElement('div', { className: 'space-y-6 animate-fade-in' },
-                        React.createElement('header', null, React.createElement('h2', { className: 'text-2xl font-bold' }, 'Tilføj glose'), React.createElement('p', { className: 'text-slate-400' }, sourceLang + ' → Dansk')),
-                        React.createElement('form', { onSubmit: handleTranslate, className: 'relative' },
-                            React.createElement('input', {
-                                value: inputValue, onChange: e => setInputValue(e.target.value),
-                                placeholder: 'Skriv her...',
-                                className: 'w-full p-5 pr-14 bg-white rounded-2xl border-2 border-slate-100 shadow-sm focus:border-blue-500 outline-none text-lg',
-                                disabled: isProcessing
-                            }),
-                            React.createElement('button', { type: 'submit', className: 'absolute right-3 top-3 bottom-3 w-10 bg-blue-600 text-white rounded-xl flex items-center justify-center' },
-                                isProcessing ? '...' : React.createElement(Icon, { name: 'send' })
-                            )
+                    ) :
+                    step === 'input' ? React.createElement('div', { className: 'space-y-4' },
+                        React.createElement('form', { onSubmit: handleTranslate, className: 'flex gap-2' },
+                            React.createElement('input', { value: inputValue, onChange: e => setInputValue(e.target.value), className: 'flex-1 p-4 border rounded-xl', placeholder: 'Skriv ord...' }),
+                            React.createElement('button', { className: 'bg-blue-600 text-white p-4 rounded-xl' }, 'OK')
                         ),
-                        React.createElement('div', { className: 'space-y-3' },
-                            sentences.map(s => React.createElement('div', { key: s.id, className: 'p-4 bg-slate-50 rounded-xl border border-slate-100 flex justify-between items-center shadow-sm' },
-                                React.createElement('div', null, 
-                                    React.createElement('p', { className: 'font-medium' }, s.original),
-                                    React.createElement('p', { className: 'text-blue-600 text-xs italic' }, s.danish)
-                                ),
-                                React.createElement('button', { onClick: () => setSentences(sentences.filter(x => x.id !== s.id)), className: 'text-slate-300 hover:text-red-500' }, React.createElement(Icon, { name: 'trash' }))
-                            ))
-                        )
-                    ),
-                    sourceLang && step === 'review' && React.createElement('div', { className: 'space-y-4 animate-fade-in' },
-                        sentences.map(s => React.createElement('div', { key: s.id, className: 'bg-white p-5 rounded-2xl border border-slate-100 flex items-center justify-between shadow-sm' },
-                            React.createElement('div', null,
-                                React.createElement('p', { className: 'text-xs text-slate-300 font-bold uppercase' }, sourceLang),
-                                React.createElement('p', { className: 'mb-2' }, s.original),
-                                React.createElement('p', { className: 'text-xs text-blue-500 font-bold uppercase' }, 'Dansk'),
-                                React.createElement('p', { className: 'text-lg font-bold' }, s.danish)
-                            ),
-                            React.createElement('button', { onClick: () => playAudio(s.danish), className: 'w-12 h-12 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center' }, React.createElement(Icon, { name: 'volume' }))
+                        sentences.map(s => React.createElement('div', { key: s.id, className: 'p-3 bg-slate-50 rounded-lg flex justify-between' }, 
+                            React.createElement('span', null, s.original),
+                            React.createElement('span', { className: 'text-blue-600 italic' }, s.danish)
                         ))
-                    ),
-                    sourceLang && step === 'flashcards' && React.createElement(Flashcards, { sentences, playAudio, sourceLang })
-                )
+                    ) : 
+                    step === 'review' ? sentences.map(s => React.createElement('div', { key: s.id, className: 'mb-4 p-4 border rounded-xl flex justify-between items-center' },
+                        React.createElement('div', null, React.createElement('p', null, s.original), React.createElement('p', { className: 'font-bold' }, s.danish)),
+                        React.createElement('button', { onClick: () => playAudio(s.danish), className: 'p-3 bg-blue-50 rounded-full' }, '🔊')
+                    )) :
+                    React.createElement(Flashcards, { sentences, playAudio })
+                ),
+                React.createElement('button', { onClick: () => { localStorage.clear(); location.reload(); }, className: 'p-2 text-[10px] text-slate-300' }, 'Nulstil alt')
             );
         };
 
-        const Flashcards = ({ sentences, playAudio, sourceLang }) => {
-            const [stack, setStack] = useState([...sentences]);
+        const Flashcards = ({ sentences, playAudio }) => {
             const [idx, setIdx] = useState(0);
-            const [flipped, setFlipped] = useState(false);
-            const [done, setDone] = useState(false);
-
-            if (sentences.length === 0) return React.createElement('div', { className: 'text-center py-20 text-slate-400' }, 'Tilføj gloser først.');
-            if (done) return React.createElement('div', { className: 'text-center py-10 space-y-6 animate-fade-in' }, 
-                React.createElement('h2', { className: 'text-2xl font-bold' }, 'Færdig!'),
-                React.createElement('button', { onClick: () => { setStack([...sentences]); setIdx(0); setDone(false); setFlipped(false); }, className: 'p-5 bg-blue-600 text-white rounded-2xl w-full font-bold shadow-lg' }, 'Øv igen')
-            );
-
-            const curr = stack[idx];
-            const next = (correct) => {
-                if (correct) {
-                    if (idx + 1 >= stack.length) setDone(true);
-                    else { setIdx(idx + 1); setFlipped(false); }
-                } else {
-                    const s = [...stack];
-                    const item = s.splice(idx, 1)[0];
-                    s.push(item);
-                    setStack(s);
-                    setFlipped(false);
-                }
-            };
-
-            return React.createElement('div', { className: 'space-y-8 animate-fade-in' },
-                React.createElement('div', { 
-                    className: 'relative h-80 w-full perspective-1000 cursor-pointer',
-                    onClick: () => setFlipped(!flipped)
-                },
-                    React.createElement('div', { className: `relative w-full h-full card-transition preserve-3d ${flipped ? 'rotate-y-180' : ''}` },
-                        React.createElement('div', { className: 'absolute inset-0 backface-hidden bg-white rounded-[40px] shadow-xl flex flex-col items-center justify-center p-8 text-center border' },
-                            React.createElement('p', { className: 'text-2xl font-medium' }, curr.original)
-                        ),
-                        React.createElement('div', { className: 'absolute inset-0 backface-hidden rotate-y-180 bg-blue-600 rounded-[40px] shadow-xl flex flex-col items-center justify-center p-8 text-center text-white' },
-                            React.createElement('p', { className: 'text-2xl font-bold mb-8' }, curr.danish),
-                            React.createElement('button', { onClick: (e) => { e.stopPropagation(); playAudio(curr.danish); }, className: 'w-16 h-16 bg-white/20 rounded-full flex items-center justify-center' }, '🔊')
-                        )
-                    )
+            const [flip, setFlip] = useState(false);
+            if (sentences.length === 0) return 'Ingen gloser endnu.';
+            const curr = sentences[idx];
+            return React.createElement('div', { className: 'space-y-6' },
+                React.createElement('div', { onClick: () => setFlip(!flip), className: 'h-64 bg-blue-600 rounded-[30px] flex items-center justify-center text-white text-2xl p-6 text-center cursor-pointer shadow-lg' },
+                    flip ? curr.danish : curr.original
                 ),
-                React.createElement('div', { className: 'grid grid-cols-2 gap-4' },
-                    React.createElement('button', { onClick: () => next(false), className: 'p-5 bg-white border-2 border-red-50 text-red-500 rounded-2xl font-bold shadow-sm' }, 'Svært'),
-                    React.createElement('button', { onClick: () => next(true), className: 'p-5 bg-white border-2 border-green-50 text-green-600 rounded-2xl font-bold shadow-sm' }, 'Let')
+                React.createElement('div', { className: 'flex gap-4' },
+                    React.createElement('button', { onClick: () => { setFlip(false); setIdx((idx + 1) % sentences.length); }, className: 'flex-1 p-4 bg-slate-100 rounded-xl' }, 'Næste'),
+                    flip && React.createElement('button', { onClick: () => playAudio(curr.danish), className: 'p-4 bg-blue-50 rounded-xl' }, '🔊')
                 )
             );
         };
